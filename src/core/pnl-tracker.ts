@@ -1,6 +1,7 @@
 import type { Trade, PnLRecord } from '../types/index.js';
 import { prisma } from '../db/client.js';
 import { createLogger } from '../utils/logger.js';
+import { sendTradeAlert } from '../utils/telegram.js';
 
 const log = createLogger('pnl-tracker');
 
@@ -34,6 +35,9 @@ export async function recordTrade(trade: Trade): Promise<void> {
 
   // ── 3. Update daily PnL record ───────────────────────
   await updateDailyPnL(trade.botId);
+
+  // ── 4. Telegram notification ─────────────────────────
+  await sendTradeAlert(trade);
 }
 
 /**
