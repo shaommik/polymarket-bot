@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Bot {
+  id        String   @id @default(uuid())
+  name      String
+  walletId  String   @unique
+  niche     String
+  sizeScale Float    @default(1.0)
+  active    Boolean  @default(true)
+  speed     String   @default("instant")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trades    Trade[]
+  positions Position[]
+
+  @@index([walletId])
+  @@index([niche])
+}
+
+model Trade {
+  id         String   @id @default(uuid())
+  botId      String
+  market     String
+  marketSlug String
+  outcome    String
+  price      Float
+  shares     Float
+  side       String
+  value      Float
+  isPaper    Boolean  @default(true)
+  timestamp  DateTime @default(now())
+  sourceHash String
+
+  bot Bot @relation(fields: [botId], references: [id])
+
+  @@index([botId])
+  @@index([market])
+  @@index([timestamp])
+}
+
+model Position {
+  id            String   @id @default(uuid())
+  botId         String
+  market        String
+  marketSlug    String
+  outcome       String
+  shares        Float
+  avgPrice      Float
+  currentPrice  Float    @default(0)
+  unrealizedPnl Float    @default(0)
+  updatedAt     DateTime @updatedAt
+
+  bot Bot @relation(fields: [botId], references: [id])
+
+  @@unique([botId, market, outcome])
+  @@index([botId])
+}
+
+model PnLRecord {
+  id            String @id @default(uuid())
+  botId         String
+  date          String
+  realizedPnl   Float  @default(0)
+  unrealizedPnl Float  @default(0)
+  totalTrades   Int    @default(0)
+  winRate       Float  @default(0)
+
+  @@unique([botId, date])
+  @@index([botId])
+}

@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+dashboard/node_modules/
+
+# Build output
+dist/
+dashboard/dist/
+
+# Environment — never commit secrets
+.env
+
+# Database
+prisma/dev.db
+prisma/dev.db-journal
+*.db
+*.db-journal
+
+# Migrations — dev only, regenerate from schema
+prisma/migrations/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
