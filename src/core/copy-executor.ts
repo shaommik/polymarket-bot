@@ -1,5 +1,6 @@
 import type { Trade } from '../types/index.js';
 import { config } from '../config.js';
+import { getBotById } from '../bots/bot-manager.js';
 import { evaluateTrade, type RiskResult } from '../risk/risk-engine.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -28,14 +29,18 @@ export async function executeTrade(trade: Trade): Promise<ExecutionResult> {
       { botId: trade.botId, market: trade.market, reason: riskResult.reason },
       'Trade rejected by risk engine — not executing',
     );
-    return { success: false, trade, paper: config.paperMode, riskDecision: riskResult, error: riskResult.reason };
+    return { success: false, trade, paper: true, riskDecision: riskResult, error: riskResult.reason };
   }
 
   // Use the risk-approved trade (may have been scaled)
   const approvedTrade = riskResult.trade;
 
-  // ── Paper / live gate ────────────────────────────────
-  if (config.paperMode) {
+  // ── Per-bot paper / live gate ────────────────────────
+  // Falls back to global config.paperMode if bot not found (safety default).
+  const bot = getBotById(trade.botId);
+  const isPaper = bot ? bot.isPaper : config.paperMode;
+
+  if (isPaper) {
     return executePaper(approvedTrade, riskResult);
   }
 

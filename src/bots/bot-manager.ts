@@ -28,8 +28,8 @@ async function upsertBot(def: BotDefinition): Promise<Bot> {
 
   const row = await prisma.bot.upsert({
     where: { walletId },
-    update: { name: def.name, niche: def.niche, sizeScale: def.sizeScale, speed: def.speed, active: def.active },
-    create: { name: def.name, walletId, niche: def.niche, sizeScale: def.sizeScale, speed: def.speed, active: def.active },
+    update: { name: def.name, niche: def.niche, sizeScale: def.sizeScale, speed: def.speed, active: def.active, isPaper: def.isPaper },
+    create: { name: def.name, walletId, niche: def.niche, sizeScale: def.sizeScale, speed: def.speed, active: def.active, isPaper: def.isPaper },
   });
 
   // Prisma returns plain objects — cast to our interface (fields match 1:1)

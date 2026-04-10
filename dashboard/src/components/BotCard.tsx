@@ -32,7 +32,15 @@ export function BotCard({ bot, selected, onSelect, onToggle }: BotCardProps) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-          <span className="font-semibold text-white text-sm truncate max-w-[140px]">{bot.name}</span>
+          <span className="font-semibold text-white text-sm truncate max-w-[120px]">{bot.name}</span>
+          <span className={clsx(
+            'text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wide',
+            bot.isPaper
+              ? 'bg-yellow-900 text-yellow-400'
+              : 'bg-emerald-900 text-emerald-300',
+          )}>
+            {bot.isPaper ? 'PAPER' : 'LIVE'}
+          </span>
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onToggle(bot.id, !bot.active); }}

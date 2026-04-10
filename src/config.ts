@@ -23,7 +23,9 @@ export const config: AppConfig = {
   paperMode: envBool('PAPER_MODE', true),
   riskLimits: {
     maxPositionSize: envNum('MAX_POSITION_SIZE', 1000),
-    nicheExposureCap: envNum('NICHE_EXPOSURE_CAP', 5000),
+    // Intentionally set very high — niche-level exposure caps are disabled.
+    // Risk is managed per-bot via botPositionSizeCaps instead.
+    nicheExposureCap: envNum('NICHE_EXPOSURE_CAP', 999999),
     maxOpenPositions: envNum('MAX_OPEN_POSITIONS', 10),
   },
   botPositionSizeCaps: {
@@ -31,6 +33,7 @@ export const config: AppConfig = {
     'Sports Sharp':       20,
     'Politics Tracker':   20,
     'Underdog Hunter':    20,
+    'Footy King':         45,
   },
   wsReconnectIntervalMs: envNum('WS_RECONNECT_INTERVAL_MS', 5000),
   wsMaxRetries: envNum('WS_MAX_RETRIES', 10),

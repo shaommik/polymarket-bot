@@ -28,9 +28,11 @@ export default function App() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs px-2 py-1 rounded-full bg-yellow-900 text-yellow-400 font-medium">
-            PAPER MODE
-          </span>
+          {bots.some(b => !b.isPaper) && (
+            <span className="text-xs px-2 py-1 rounded-full bg-emerald-900 text-emerald-400 font-medium">
+              LIVE TRADING ACTIVE
+            </span>
+          )}
         </div>
       </header>
 

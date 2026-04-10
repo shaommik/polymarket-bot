@@ -17,6 +17,7 @@ export interface Bot {
   niche: Niche;
   sizeScale: number;
   active: boolean;
+  isPaper: boolean;
   speed: BotSpeed;
   createdAt: Date;
   updatedAt: Date;
