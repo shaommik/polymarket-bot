@@ -42,6 +42,36 @@ export async function tradesRoutes(app: FastifyInstance) {
     return reply.send({ trades, limit, offset, count: trades.length });
   });
 
+  // ── GET /trades/heatmap — activity by day × hour ─────
+  app.get('/trades/heatmap', async (req, reply) => {
+    const query = (req.query as Record<string, string>);
+    const botId = query.botId ?? null; // optional — omit for all bots
+
+    const trades = await prisma.trade.findMany({
+      where: botId ? { botId } : {},
+      select: { timestamp: true },
+    });
+
+    // Build a day×hour count matrix
+    // day: 0=Sun … 6=Sat, hour: 0–23
+    const matrix: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0));
+    for (const t of trades) {
+      const d = new Date(t.timestamp);
+      matrix[d.getUTCDay()][d.getUTCHours()]++;
+    }
+
+    const cells = [];
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    for (let day = 0; day < 7; day++) {
+      for (let hour = 0; hour < 24; hour++) {
+        cells.push({ day: DAYS[day], dayIndex: day, hour, count: matrix[day][hour] });
+      }
+    }
+
+    const maxCount = Math.max(...cells.map(c => c.count), 1);
+    return reply.send({ cells, maxCount, total: trades.length });
+  });
+
   // ── GET /trades/:botId/positions ─────────────────────
   app.get<{ Params: { botId: string } }>('/trades/:botId/positions', async (req, reply) => {
     const bot = await prisma.bot.findUnique({ where: { id: req.params.botId } });

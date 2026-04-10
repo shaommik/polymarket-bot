@@ -36,14 +36,15 @@ export function BotCard({ bot, selected, onSelect, onToggle }: BotCardProps) {
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onToggle(bot.id, !bot.active); }}
+          title={bot.active ? 'Click to pause' : 'Click to resume'}
           className={clsx(
             'text-xs px-2 py-0.5 rounded-full font-medium transition-colors',
             bot.active
-              ? 'bg-emerald-900 text-emerald-400 hover:bg-emerald-800'
-              : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700',
+              ? 'bg-emerald-900 text-emerald-400 hover:bg-red-950 hover:text-red-400'
+              : 'bg-zinc-800 text-zinc-400 hover:bg-emerald-950 hover:text-emerald-400',
           )}
         >
-          {bot.active ? 'Active' : 'Paused'}
+          {bot.active ? '⏸ Running' : '▶ Paused'}
         </button>
       </div>
 

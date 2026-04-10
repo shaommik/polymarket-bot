@@ -87,6 +87,24 @@ export function fetchTrades(botId: string, query: TradesQuery = {}): Promise<Tra
   return get<TradesResponse>(`/trades/${botId}${qs}`);
 }
 
+export interface HeatmapCell {
+  day: string;
+  dayIndex: number;
+  hour: number;
+  count: number;
+}
+
+export interface HeatmapResponse {
+  cells: HeatmapCell[];
+  maxCount: number;
+  total: number;
+}
+
+export function fetchHeatmap(botId?: string): Promise<HeatmapResponse> {
+  const qs = botId ? `?botId=${botId}` : '';
+  return get<HeatmapResponse>(`/trades/heatmap${qs}`);
+}
+
 // ── PnL ───────────────────────────────────────────────
 
 export interface PnLResponse {
@@ -112,6 +130,7 @@ export interface PnLSummaryItem {
   totalPnl: number;
   totalTrades: number;
   winRate: number;
+  volume: number;
 }
 
 export interface PnLSummaryResponse {

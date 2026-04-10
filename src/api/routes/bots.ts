@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../db/client.js';
 import { requireValidAddress } from '../../utils/wallet.js';
 import { createLogger } from '../../utils/logger.js';
-import { getAllBots, getBotById } from '../../bots/bot-manager.js';
+import { getAllBots, getBotById, updateBotInCache } from '../../bots/bot-manager.js';
 
 const log = createLogger('routes/bots');
 
@@ -88,6 +88,7 @@ export async function botsRoutes(app: FastifyInstance) {
       data: result.data,
     });
 
+    updateBotInCache(bot as unknown as import('../../types/index.js').Bot);
     log.info({ botId: bot.id, changes: result.data }, 'Bot updated via API');
     return reply.send(bot);
   });

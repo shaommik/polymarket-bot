@@ -96,3 +96,18 @@ export function getActiveBots(): Bot[] {
 export function getWatchedWallets(): string[] {
   return Array.from(botsByWallet.keys());
 }
+
+/**
+ * Update a bot in the in-memory cache after a DB write.
+ * Called from the PATCH /bots/:id route so pause/resume
+ * takes effect immediately without a restart.
+ */
+export function updateBotInCache(bot: Bot): void {
+  // Remove from wallet index first (active state may have changed)
+  const existing = botsById.get(bot.id);
+  if (existing) {
+    botsByWallet.delete(existing.walletId.toLowerCase());
+  }
+  indexBot(bot);
+  log.info({ botId: bot.id, active: bot.active }, 'Bot cache updated');
+}

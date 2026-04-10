@@ -69,6 +69,11 @@ export async function pnlRoutes(app: FastifyInstance) {
         });
         const unrealizedPnl = await getOpenPositionsPnL(bot.id);
 
+        const volumeResult = await prisma.trade.aggregate({
+          where: { botId: bot.id },
+          _sum: { value: true },
+        });
+
         return {
           botId: bot.id,
           botName: bot.name,
@@ -78,6 +83,7 @@ export async function pnlRoutes(app: FastifyInstance) {
           totalPnl: (record?.realizedPnl ?? 0) + unrealizedPnl,
           totalTrades: record?.totalTrades ?? 0,
           winRate: record?.winRate ?? 0,
+          volume: volumeResult._sum.value ?? 0,
         };
       }),
     );

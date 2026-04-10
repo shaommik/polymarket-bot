@@ -6,6 +6,9 @@ import { TradeLog } from './components/TradeLog.js';
 import { PnLChart } from './components/PnLChart.js';
 import { RiskGauge } from './components/RiskGauge.js';
 import { AddBotModal } from './components/AddBotModal.js';
+import { SummaryBar } from './components/SummaryBar.js';
+import { ComparisonChart } from './components/ComparisonChart.js';
+import { ActivityHeatmap } from './components/ActivityHeatmap.js';
 
 export default function App() {
   const { bots, loading, error, addBot, toggleBot } = useBots();
@@ -38,6 +41,12 @@ export default function App() {
             {error}
           </div>
         )}
+
+        {/* Summary bar */}
+        <SummaryBar />
+
+        {/* Comparison chart */}
+        {!loading && bots.length > 0 && <ComparisonChart bots={bots} />}
 
         {/* Bot list */}
         {loading ? (
@@ -75,6 +84,11 @@ export default function App() {
                 Live Trade Log — {selectedBot.name}
               </h2>
               <TradeLog botId={selectedBotId} />
+            </div>
+
+            {/* Activity Heatmap — full width */}
+            <div className="lg:col-span-3">
+              <ActivityHeatmap bots={bots} selectedBotId={selectedBotId} />
             </div>
           </div>
         )}
