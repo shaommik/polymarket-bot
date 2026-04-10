@@ -26,6 +26,12 @@ export const config: AppConfig = {
     nicheExposureCap: envNum('NICHE_EXPOSURE_CAP', 5000),
     maxOpenPositions: envNum('MAX_OPEN_POSITIONS', 10),
   },
+  botPositionSizeCaps: {
+    'CryptoWhale Copier': 30,
+    'Sports Sharp':       20,
+    'Politics Tracker':   20,
+    'Underdog Hunter':    20,
+  },
   wsReconnectIntervalMs: envNum('WS_RECONNECT_INTERVAL_MS', 5000),
   wsMaxRetries: envNum('WS_MAX_RETRIES', 10),
   polymarketApiUrl: envStr('POLYMARKET_API_URL', 'https://clob.polymarket.com'),

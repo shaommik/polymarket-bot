@@ -32,7 +32,10 @@ export async function evaluateTrade(trade: Trade): Promise<RiskResult> {
   }
 
   // ── 1. Max position size ─────────────────────────────
-  const positionCheck = checkPositionSize(trade, limits);
+  // Per-bot cap takes precedence over global limit
+  const botCap = config.botPositionSizeCaps[bot.name];
+  const effectiveCap = botCap !== undefined ? botCap : limits.maxPositionSize;
+  const positionCheck = checkPositionSize(trade, { ...limits, maxPositionSize: effectiveCap });
   if (positionCheck.decision === 'rejected') {
     return logAndReturn(positionCheck);
   }

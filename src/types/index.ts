@@ -103,6 +103,8 @@ export type WsEvent = WsNewTrade | WsPnlUpdate | WsRiskAlert;
 export interface AppConfig {
   paperMode: boolean;
   riskLimits: RiskLimits;
+  /** Per-bot max position size overrides, keyed by bot name. Takes precedence over riskLimits.maxPositionSize. */
+  botPositionSizeCaps: Record<string, number>;
   wsReconnectIntervalMs: number;
   wsMaxRetries: number;
   polymarketApiUrl: string;
