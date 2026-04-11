@@ -42,6 +42,7 @@ model Trade {
 
   bot Bot @relation(fields: [botId], references: [id])
 
+  @@unique([botId, sourceHash])
   @@index([botId])
   @@index([market])
   @@index([timestamp])

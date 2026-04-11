@@ -38,6 +38,8 @@ export interface Trade {
   isPaper: boolean;
   timestamp: Date;
   sourceHash: string;
+  /** In-memory only — true for startup backfill trades, suppresses Telegram notification */
+  isBackfill?: boolean;
 }
 
 // ── Position ───────────────────────────────────────────

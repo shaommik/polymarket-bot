@@ -17,6 +17,10 @@ export interface RawTradeEvent {
   transaction_hash: string;
   maker_address: string;
   taker_address: string;
+  /** Human-readable market title, populated by TradeMonitor */
+  marketTitle?: string;
+  /** True for synthetic backfill events — skip Telegram notification */
+  isBackfill?: boolean;
 }
 
 export class WebSocketListener extends EventEmitter {

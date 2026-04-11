@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import { config, port } from './config.js';
 import { connectDb, disconnectDb } from './db/client.js';
-import { initBots, getWatchedWallets } from './bots/bot-manager.js';
-import { WebSocketListener } from './core/websocket-listener.js';
+import { initBots, getWatchedWallets, getBotById } from './bots/bot-manager.js';
+import { TradeMonitor } from './core/trade-monitor.js';
 import { parseTrade } from './core/trade-parser.js';
 import { executeTrade } from './core/copy-executor.js';
 import { recordTrade } from './core/pnl-tracker.js';
@@ -25,18 +25,26 @@ async function main() {
   const wallets = getWatchedWallets();
   log.info({ wallets: wallets.length }, 'Watching wallets');
 
-  // ── 3. Polymarket WebSocket listener ──────────────────
-  const listener = new WebSocketListener();
+  // ── 3. Polymarket trade monitor (polling) ────────────
+  const listener = new TradeMonitor();
 
-  listener.on('connected', () => {
-    listener.subscribe(wallets);
-  });
+  const SPEED_DELAY: Record<string, number> = {
+    instant:     0,
+    delayed_5s:  5_000,
+    delayed_30s: 30_000,
+  };
 
   listener.on('trade', async (raw) => {
-    const parsed = parseTrade(raw);
+    const parsed = await parseTrade(raw);
     if (!parsed) return;
 
     const { trade } = parsed;
+
+    // Apply bot speed delay before executing
+    const bot = getBotById(trade.botId);
+    const delay = bot ? (SPEED_DELAY[bot.speed] ?? 0) : 0;
+    if (delay > 0) await new Promise(res => setTimeout(res, delay));
+
     const result = await executeTrade(trade);
     if (!result.success) return;
 
@@ -46,11 +54,7 @@ async function main() {
     broadcast({ type: 'new_trade', payload: result.trade });
   });
 
-  listener.on('max_retries', () => {
-    log.error('WebSocket max retries reached — bot is no longer receiving events');
-  });
-
-  listener.connect();
+  listener.start(wallets);
 
   // ── 4. API server ─────────────────────────────────────
   const app = buildServer();
@@ -64,7 +68,7 @@ async function main() {
   // ── 5. Graceful shutdown ──────────────────────────────
   const shutdown = async (signal: string) => {
     log.info({ signal }, 'Shutting down');
-    listener.disconnect();
+    listener.stop();
     await app.close();
     await disconnectDb();
     process.exit(0);

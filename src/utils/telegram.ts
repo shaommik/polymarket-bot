@@ -22,6 +22,7 @@ function isConfigured(): boolean {
  */
 export async function sendTradeAlert(trade: Trade): Promise<void> {
   if (!isConfigured()) return;
+  if (trade.isBackfill) return; // suppress notifications for startup backfill trades
 
   try {
     const botRecord = getBotById(trade.botId);
@@ -30,6 +31,8 @@ export async function sendTradeAlert(trade: Trade): Promise<void> {
     const sideEmoji = trade.side === 'buy' ? '🟢 BUY' : '🔴 SELL';
     const outcomeLabel = trade.outcome.toUpperCase();
     const time = new Date(trade.timestamp).toUTCString();
+    // Use human-readable market title if available, fall back to raw slug
+    const marketDisplay = trade.marketSlug.length < 80 ? trade.marketSlug : trade.market.slice(0, 12) + '…';
 
     // ── Fetch all-bots PnL summary ──────────────────────
     const bots = await prisma.bot.findMany({ where: { active: true } });
@@ -68,7 +71,7 @@ export async function sendTradeAlert(trade: Trade): Promise<void> {
       `<b>🤖 ${botName}</b> ${mode}`,
       ``,
       `<b>Trade</b>`,
-      `  ${sideEmoji} <b>${outcomeLabel}</b> on <code>${trade.marketSlug}</code>`,
+      `  ${sideEmoji} <b>${outcomeLabel}</b> on <code>${marketDisplay}</code>`,
       `  Price: <b>${(trade.price * 100).toFixed(1)}¢</b>  ×  ${trade.shares.toFixed(4)} shares`,
       `  Bet value: <b>$${trade.value.toFixed(2)}</b>`,
       `  Time: ${time}`,

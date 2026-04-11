@@ -19,57 +19,32 @@ interface UsePnLSummaryState {
 export function usePnL(botId: string | null) {
   const [state, setState] = useState<UsePnLState>({ data: null, loading: false, error: null });
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!botId) {
       setState({ data: null, loading: false, error: null });
       return;
     }
-
-    setState(s => ({ ...s, loading: true, error: null }));
     fetchPnL(botId)
       .then(data => setState({ data, loading: false, error: null }))
       .catch(err => setState(s => ({ ...s, loading: false, error: (err as Error).message })));
   }, [botId]);
 
+  useEffect(() => {
+    if (!botId) {
+      setState({ data: null, loading: false, error: null });
+      return;
+    }
+    setState(s => ({ ...s, loading: true, error: null }));
+    load();
+  }, [botId, load]);
+
+  // On pnl_update, re-fetch from the API so unrealizedPnl is always live
+  // (the WS record snapshot can be stale if positions moved since last trade)
   const handleWsEvent = useCallback((event: WsEvent) => {
     if (event.type !== 'pnl_update') return;
     if (botId && event.payload.botId !== botId) return;
-
-    const updated: PnLRecord = event.payload;
-
-    setState(s => {
-      if (!s.data) return s;
-
-      // Replace today's record or append
-      const today = updated.date;
-      const exists = s.data.history.some(r => r.date === today);
-      const history = exists
-        ? s.data.history.map(r => r.date === today ? updated : r)
-        : [...s.data.history, updated];
-
-      const totalRealized = history.reduce((sum, r) => sum + r.realizedPnl, 0);
-      const totalTrades = history.reduce((sum, r) => sum + r.totalTrades, 0);
-      const avgWinRate = history.length > 0
-        ? history.reduce((sum, r) => sum + r.winRate, 0) / history.length
-        : 0;
-
-      return {
-        ...s,
-        data: {
-          ...s.data,
-          history,
-          summary: {
-            ...s.data.summary,
-            totalRealized,
-            unrealizedPnl: updated.unrealizedPnl,
-            totalPnl: totalRealized + updated.unrealizedPnl,
-            totalTrades,
-            avgWinRate,
-          },
-        },
-      };
-    });
-  }, [botId]);
+    load();
+  }, [botId, load]);
 
   useWebSocket(handleWsEvent);
 
@@ -89,26 +64,11 @@ export function usePnLSummary() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Re-fetch on pnl_update so unrealizedPnl is always live from the API
   const handleWsEvent = useCallback((event: WsEvent) => {
     if (event.type !== 'pnl_update') return;
-    const updated = event.payload;
-
-    setState(s => {
-      if (!s.data) return s;
-      const summaries = s.data.summaries.map(item => {
-        if (item.botId !== updated.botId) return item;
-        return {
-          ...item,
-          todayRealized: updated.realizedPnl,
-          unrealizedPnl: updated.unrealizedPnl,
-          totalPnl: updated.realizedPnl + updated.unrealizedPnl,
-          totalTrades: updated.totalTrades,
-          winRate: updated.winRate,
-        };
-      });
-      return { ...s, data: { ...s.data, summaries } };
-    });
-  }, []);
+    load();
+  }, [load]);
 
   useWebSocket(handleWsEvent);
 

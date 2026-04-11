@@ -20,12 +20,27 @@ export function PnLChart({ bot }: PnLChartProps) {
 
   const color = NICHE_COLORS[bot.niche] ?? '#3B82F6';
 
-  const chartData = data.history.map(r => ({
+  const rawPoints = data.history.map(r => ({
     date: r.date.slice(5), // MM-DD
     realized: parseFloat(r.realizedPnl.toFixed(2)),
     unrealized: parseFloat(r.unrealizedPnl.toFixed(2)),
     total: parseFloat((r.realizedPnl + r.unrealizedPnl).toFixed(2)),
   }));
+
+  // When there's only one data point, prepend a zero baseline for the previous
+  // day so Recharts renders a line instead of an isolated dot.
+  const chartData = rawPoints.length === 1
+    ? [
+        (() => {
+          const [month, day] = rawPoints[0].date.split('-').map(Number);
+          const prev = new Date(new Date().getFullYear(), month - 1, day - 1);
+          const mm = String(prev.getMonth() + 1).padStart(2, '0');
+          const dd = String(prev.getDate()).padStart(2, '0');
+          return { date: `${mm}-${dd}`, realized: 0, unrealized: 0, total: 0 };
+        })(),
+        ...rawPoints,
+      ]
+    : rawPoints;
 
   const summary = data.summary;
 
@@ -36,7 +51,7 @@ export function PnLChart({ bot }: PnLChartProps) {
         <SummaryTile label="Total PnL" value={summary.totalPnl} dollar />
         <SummaryTile label="Realized" value={summary.totalRealized} dollar />
         <SummaryTile label="Unrealized" value={summary.unrealizedPnl} dollar />
-        <SummaryTile label="Win Rate" value={summary.avgWinRate * 100} pct />
+        <SummaryTile label="Return" value={summary.totalPnl} pct />
       </div>
 
       {/* Chart */}
@@ -64,7 +79,7 @@ function SummaryTile({ label, value, dollar, pct }: { label: string; value: numb
   const positive = value >= 0;
   const display = dollar
     ? `${positive ? '+' : ''}$${Math.abs(value).toFixed(2)}`
-    : `${value.toFixed(1)}%`;
+    : `${positive ? '+' : ''}${value.toFixed(1)}%`;
 
   return (
     <div className="bg-zinc-900 rounded-lg p-3">

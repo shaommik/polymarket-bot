@@ -27,17 +27,15 @@ export function SummaryBar() {
     const totalTrades  = s.reduce((sum, b) => sum + b.totalTrades, 0);
     const totalVolume  = s.reduce((sum, b) => sum + (b.volume ?? 0), 0);
 
-    // Weighted win rate: weight by number of trades
-    const weightedWinRate = totalTrades > 0
-      ? s.reduce((sum, b) => sum + b.winRate * b.totalTrades, 0) / totalTrades
-      : 0;
+    // Overall return: total PnL across all bots / (100 * numBots) * 100
+    const overallReturn = s.length > 0 ? totalPnl / (100 * s.length) * 100 : 0;
 
     const best = s.reduce<{ name: string; pnl: number } | null>((top, b) => {
       if (!top || b.totalPnl > top.pnl) return { name: b.botName, pnl: b.totalPnl };
       return top;
     }, null);
 
-    return { totalPnl, totalTrades, totalVolume, weightedWinRate, best };
+    return { totalPnl, totalTrades, totalVolume, overallReturn, best };
   }, [data]);
 
   return (
@@ -49,9 +47,9 @@ export function SummaryBar() {
         highlight
       />
       <StatCard
-        label="Overall Win Rate"
-        value={loading || !stats ? '—' : `${(stats.weightedWinRate * 100).toFixed(1)}%`}
-        positive={stats ? stats.weightedWinRate >= 0.5 : undefined}
+        label="Overall Return"
+        value={loading || !stats ? '—' : `${stats.overallReturn >= 0 ? '+' : ''}${stats.overallReturn.toFixed(1)}%`}
+        positive={stats ? stats.overallReturn >= 0 : undefined}
       />
       <StatCard
         label="Total Trades"

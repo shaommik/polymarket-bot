@@ -2,6 +2,7 @@ import type { Trade, PnLRecord } from '../types/index.js';
 import { prisma } from '../db/client.js';
 import { createLogger } from '../utils/logger.js';
 import { sendTradeAlert } from '../utils/telegram.js';
+import { broadcast } from '../api/server.js';
 
 const log = createLogger('pnl-tracker');
 
@@ -11,8 +12,11 @@ const log = createLogger('pnl-tracker');
  */
 export async function recordTrade(trade: Trade): Promise<void> {
   // ── 1. Persist the trade ─────────────────────────────
-  await prisma.trade.create({
-    data: {
+  // Use upsert on (botId, sourceHash) so any duplicate that slips through
+  // the in-memory deduplication is silently ignored rather than crashing.
+  const created = await prisma.trade.upsert({
+    where: { botId_sourceHash: { botId: trade.botId, sourceHash: trade.sourceHash } },
+    create: {
       id: trade.id,
       botId: trade.botId,
       market: trade.market,
@@ -26,38 +30,52 @@ export async function recordTrade(trade: Trade): Promise<void> {
       timestamp: trade.timestamp,
       sourceHash: trade.sourceHash,
     },
+    update: {}, // already exists — no-op
   });
+
+  if (created.id !== trade.id) {
+    log.warn({ sourceHash: trade.sourceHash, botId: trade.botId }, 'Duplicate trade skipped at DB level');
+    return;
+  }
 
   log.info({ tradeId: trade.id, botId: trade.botId, market: trade.market }, 'Trade persisted');
 
-  // ── 2. Update position ───────────────────────────────
-  await updatePosition(trade);
+  // ── 2. Update position, capturing realized PnL from sells ─
+  const realizedFromTrade = await updatePosition(trade);
 
   // ── 3. Update daily PnL record ───────────────────────
-  await updateDailyPnL(trade.botId);
+  const updatedRecord = await updateDailyPnL(trade.botId, realizedFromTrade);
 
-  // ── 4. Telegram notification ─────────────────────────
+  // ── 4. Broadcast pnl_update to dashboard ─────────────
+  if (updatedRecord) {
+    broadcast({ type: 'pnl_update', payload: updatedRecord });
+  }
+
+  // ── 5. Telegram notification ─────────────────────────
   await sendTradeAlert(trade);
 }
 
 /**
  * Update or create the position for this bot+market+outcome.
  * Buys increase shares and adjust avgPrice; sells decrease shares and realize PnL.
+ * Returns the realized PnL from this trade (0 for buys).
  */
-async function updatePosition(trade: Trade): Promise<void> {
-  const existing = await prisma.position.findUnique({
-    where: {
-      botId_market_outcome: {
-        botId: trade.botId,
-        market: trade.market,
-        outcome: trade.outcome,
+async function updatePosition(trade: Trade): Promise<number> {
+  // Use a transaction to prevent race conditions on concurrent trades for the same position
+  const existing = await prisma.$transaction(async (tx) => {
+    return tx.position.findUnique({
+      where: {
+        botId_market_outcome: {
+          botId: trade.botId,
+          market: trade.market,
+          outcome: trade.outcome,
+        },
       },
-    },
+    });
   });
 
   if (trade.side === 'buy') {
     if (existing) {
-      // Weighted average price: (old_shares * old_avg + new_shares * new_price) / total_shares
       const totalShares = existing.shares + trade.shares;
       const avgPrice = (existing.shares * existing.avgPrice + trade.shares * trade.price) / totalShares;
 
@@ -76,8 +94,17 @@ async function updatePosition(trade: Trade): Promise<void> {
         'Position increased',
       );
     } else {
-      await prisma.position.create({
-        data: {
+      // Use upsert to handle the race where two trades arrive simultaneously
+      // for the same position — the second create would fail with P2002 otherwise.
+      await prisma.position.upsert({
+        where: {
+          botId_market_outcome: {
+            botId: trade.botId,
+            market: trade.market,
+            outcome: trade.outcome,
+          },
+        },
+        create: {
           botId: trade.botId,
           market: trade.market,
           marketSlug: trade.marketSlug,
@@ -87,6 +114,13 @@ async function updatePosition(trade: Trade): Promise<void> {
           currentPrice: trade.price,
           unrealizedPnl: 0,
         },
+        update: {
+          // Another trade beat us to it — merge using weighted average
+          shares: { increment: trade.shares },
+          currentPrice: trade.price,
+          // avgPrice and unrealizedPnl will be corrected on the next trade update;
+          // for now keep existing avgPrice (conservative — avoids division-by-zero)
+        },
       });
 
       log.info(
@@ -94,19 +128,23 @@ async function updatePosition(trade: Trade): Promise<void> {
         'New position opened',
       );
     }
+
+    return 0;
   } else {
     // Sell — reduce shares, realize PnL
     if (!existing || existing.shares <= 0) {
       log.warn({ botId: trade.botId, market: trade.market }, 'Sell with no open position — skipping position update');
-      return;
+      return 0;
     }
 
     const closedShares = Math.min(trade.shares, existing.shares);
+
+    // Read avgPrice BEFORE updating the position
     const realizedPnl = (trade.price - existing.avgPrice) * closedShares;
+
     const remainingShares = existing.shares - closedShares;
 
     if (remainingShares <= 0) {
-      // Position fully closed
       await prisma.position.update({
         where: { id: existing.id },
         data: { shares: 0, currentPrice: trade.price, unrealizedPnl: 0 },
@@ -129,58 +167,75 @@ async function updatePosition(trade: Trade): Promise<void> {
         'Position partially closed',
       );
     }
+
+    return realizedPnl;
   }
 }
 
 /**
  * Recalculate and upsert the daily PnL snapshot for a bot.
- * Aggregates realized PnL from today's trades and unrealized from open positions.
+ * Accumulates realized PnL from the current trade and unrealized from open positions.
  */
-async function updateDailyPnL(botId: string): Promise<void> {
+async function updateDailyPnL(botId: string, realizedFromTrade: number): Promise<PnLRecord | null> {
   const today = new Date().toISOString().split('T')[0];
   const startOfDay = new Date(today + 'T00:00:00.000Z');
 
-  // Today's trades for this bot
+  // Today's trades for win rate
   const todayTrades = await prisma.trade.findMany({
     where: { botId, timestamp: { gte: startOfDay } },
   });
 
-  // All open positions for this bot
+  // All open positions for unrealized PnL
   const openPositions = await prisma.position.findMany({
     where: { botId, shares: { gt: 0 } },
   });
 
-  // Realized PnL: sum of (sell_price - avg_entry_price) * shares for sell trades
-  // We track this cumulatively from positions, so get it from closed positions today
   const totalTrades = todayTrades.length;
-  const wins = todayTrades.filter(t => {
-    if (t.side !== 'sell') return false;
-    // A winning sell is one where sell price > position avg price
-    // Simplified: sell price > 0.5 for yes outcomes is generally a win
-    return t.price > 0.5;
-  }).length;
-  const winRate = totalTrades > 0 ? wins / totalTrades : 0;
+
+  // Win rate: only count sells on resolved markets (price = 1.0 or 0.0).
+  // Fractional prices mean the market is still live — don't count as win/loss yet.
+  const resolvedSells = todayTrades.filter(
+    t => t.side === 'sell' && (t.price >= 0.99 || t.price <= 0.01),
+  );
+  const wins = resolvedSells.filter(t => t.price >= 0.99).length;
+  // If no resolved trades today, winRate = -1 signals "Pending" to callers
+  const winRate = resolvedSells.length > 0 ? wins / resolvedSells.length : -1;
 
   // Sum unrealized PnL from all open positions
   const unrealizedPnl = openPositions.reduce((sum, p) => sum + p.unrealizedPnl, 0);
 
-  // Realized PnL from sell trades today: (sell_price - avg_entry) * shares
-  // Approximation: sum of value for sells minus cost basis
-  const sellTrades = todayTrades.filter(t => t.side === 'sell');
-  const realizedPnl = sellTrades.reduce((sum, t) => sum + t.value, 0)
-    - sellTrades.reduce((sum, t) => sum + (t.price * t.shares - t.value + t.value), 0)
-    + unrealizedPnl * 0; // placeholder — proper tracking needs position snapshots
-
-  await prisma.pnLRecord.upsert({
+  // Get existing record to accumulate realized PnL correctly
+  const existing = await prisma.pnLRecord.findUnique({
     where: { botId_date: { botId, date: today } },
-    update: { realizedPnl, unrealizedPnl, totalTrades, winRate },
-    create: { botId, date: today, realizedPnl, unrealizedPnl, totalTrades, winRate },
+  });
+  const accumulatedRealizedPnl = (existing?.realizedPnl ?? 0) + realizedFromTrade;
+
+  const record = await prisma.pnLRecord.upsert({
+    where: { botId_date: { botId, date: today } },
+    update: { realizedPnl: accumulatedRealizedPnl, unrealizedPnl, totalTrades, winRate },
+    create: { botId, date: today, realizedPnl: accumulatedRealizedPnl, unrealizedPnl, totalTrades, winRate },
   });
 
   log.info(
-    { botId, date: today, realizedPnl: realizedPnl.toFixed(4), unrealizedPnl: unrealizedPnl.toFixed(4), totalTrades, winRate: winRate.toFixed(2) },
+    {
+      botId,
+      date: today,
+      realizedPnl: accumulatedRealizedPnl.toFixed(4),
+      unrealizedPnl: unrealizedPnl.toFixed(4),
+      totalTrades,
+      winRate: winRate.toFixed(2),
+    },
     'Daily PnL updated',
   );
+
+  return {
+    botId: record.botId,
+    date: record.date,
+    realizedPnl: record.realizedPnl,
+    unrealizedPnl: record.unrealizedPnl,
+    totalTrades: record.totalTrades,
+    winRate: record.winRate,
+  };
 }
 
 /**

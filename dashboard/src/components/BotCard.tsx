@@ -71,7 +71,7 @@ export function BotCard({ bot, selected, onSelect, onToggle }: BotCardProps) {
           <Stat label="Total PnL" value={fmt(summary.totalPnl)} positive={summary.totalPnl >= 0} />
           <Stat label="Unrealized" value={fmt(summary.unrealizedPnl)} positive={summary.unrealizedPnl >= 0} />
           <Stat label="Trades" value={String(summary.totalTrades)} />
-          <Stat label="Win Rate" value={`${(summary.avgWinRate * 100).toFixed(0)}%`} positive={summary.avgWinRate >= 0.5} />
+          <Stat label="Return" value={`${summary.totalPnl >= 0 ? '+' : ''}${summary.totalPnl.toFixed(1)}%`} positive={summary.totalPnl >= 0} />
         </div>
       ) : (
         <div className="text-xs text-zinc-500">No data yet</div>
